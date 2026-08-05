@@ -4,7 +4,7 @@ import { TaskForm } from "./components/TaskForm";
 import { TaskList } from "./components/TaskList";
 import { Search, LayoutList, CheckCheck } from "lucide-react";
 
-const API_URL = "http://localhost:3333";
+const API_URL = "https://tasks-api-ggyw.onrender.com";
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
