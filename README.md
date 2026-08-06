@@ -4,6 +4,19 @@ Interface web para gerenciamento de tarefas, construída com React e Vite e inte
 
 O projeto oferece uma experiência direta para organizar atividades, acompanhar o progresso e localizar tarefas pelo título em uma interface dark com efeitos de glassmorphism.
 
+## Aplicação online
+
+Acesse a interface publicada em:
+
+### [Abrir o TaskManager](https://tasks-front-seven.vercel.app)
+
+| Serviço | Endereço |
+| --- | --- |
+| Front-end na Vercel | [https://tasks-front-seven.vercel.app](https://tasks-front-seven.vercel.app) |
+| Tarefas da API no Render | [https://tasks-api-ggyw.onrender.com/tasks](https://tasks-api-ggyw.onrender.com/tasks) |
+
+O endereço do Render pertence à API e retorna JSON. Ele não contém a interface visual; a página da aplicação está hospedada na Vercel.
+
 ## Funcionalidades
 
 - Criação de tarefas com título obrigatório e descrição opcional
@@ -28,13 +41,15 @@ O projeto oferece uma experiência direta para organizar atividades, acompanhar 
 
 ## Integração com a API
 
-A aplicação está configurada em `src/App.jsx` para consumir a API publicada em:
+A aplicação está configurada em `src/App.jsx` para consumir a seguinte URL base da API:
 
 ```text
 https://tasks-api-ggyw.onrender.com
 ```
 
-Por isso, não é necessário executar o back-end localmente para usar o front-end com a configuração atual.
+As tarefas podem ser consultadas diretamente pela rota [`/tasks`](https://tasks-api-ggyw.onrender.com/tasks). A raiz da API (`/`) não é uma página web e atualmente responde que a rota não foi encontrada.
+
+Não é necessário executar o back-end localmente para usar o front-end com a configuração atual.
 
 As operações realizadas pela interface são:
 
@@ -77,7 +92,7 @@ tasks-front/
 
 Essas versões atendem ao requisito do Vite 8 usado pelo projeto.
 
-## Execução local
+## Execução local para desenvolvimento
 
 Clone o repositório e acesse a pasta do projeto:
 
@@ -98,7 +113,7 @@ Inicie o servidor de desenvolvimento:
 npm run dev
 ```
 
-Abra o endereço exibido pelo Vite no terminal. Por padrão, ele usa `http://localhost:5173` quando essa porta está disponível.
+Abra o endereço exibido pelo Vite no terminal. Por padrão, ele usa `http://localhost:5173` quando essa porta está disponível. Esse endereço funciona apenas no computador que está executando o projeto; a versão pública está na [Vercel](https://tasks-front-seven.vercel.app).
 
 ## Scripts
 
