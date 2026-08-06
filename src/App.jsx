@@ -1,60 +1,112 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCheck,
+  CircleDashed,
+  LayoutGrid,
+  Search,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { Header } from "./components/Header";
 import { TaskForm } from "./components/TaskForm";
 import { TaskList } from "./components/TaskList";
-import { Search, LayoutList, CheckCheck } from "lucide-react";
 
 const API_URL = "https://tasks-api-ggyw.onrender.com";
 
-async function fetchTasks(search) {
-  const query = search ? `?title=${encodeURIComponent(search)}` : "";
-  const response = await fetch(`${API_URL}/tasks${query}`);
+async function apiRequest(path, options) {
+  const response = await fetch(`${API_URL}${path}`, options);
+
+  if (!response.ok) {
+    throw new Error("Não foi possível concluir a operação.");
+  }
+
+  if (response.status === 204) return null;
   return response.json();
+}
+
+function fetchTasks(search) {
+  const query = search ? `?title=${encodeURIComponent(search)}` : "";
+  return apiRequest(`/tasks${query}`);
 }
 
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [editingTask, setEditingTask] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
-
-  async function loadTasks() {
-    const data = await fetchTasks(search);
-    setTasks(data);
-  }
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    let shouldUpdate = true;
+    let active = true;
 
-    fetchTasks(search).then(data => {
-      if (shouldUpdate) {
-        setTasks(data);
-      }
-    });
+    fetchTasks(search)
+      .then(data => {
+        if (active) {
+          setTasks(data);
+          setError("");
+        }
+      })
+      .catch(() => {
+        if (active) setError("A API está demorando para responder. Tente novamente.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
 
     return () => {
-      shouldUpdate = false;
+      active = false;
     };
   }, [search]);
 
-  async function handleCreateTask({ title, description }) {
-    await fetch(`${API_URL}/tasks`, {
+  async function reloadTasks() {
+    setIsLoading(true);
+    try {
+      const data = await fetchTasks(search);
+      setTasks(data);
+      setError("");
+      return true;
+    } catch {
+      setError("Não foi possível sincronizar suas tarefas.");
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function runMutation(path, options) {
+    setError("");
+    try {
+      await apiRequest(path, options);
+      await reloadTasks();
+      return true;
+    } catch {
+      setError("Não foi possível salvar a alteração. Tente novamente.");
+      return false;
+    }
+  }
+
+  function handleSearch(value) {
+    setIsLoading(true);
+    setSearch(value);
+  }
+
+  function handleCreateTask({ title, description }) {
+    return runMutation("/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, description }),
     });
-    loadTasks();
   }
 
-  async function handleComplete(id) {
-    await fetch(`${API_URL}/tasks/${id}/complete`, { method: "PATCH" });
-    loadTasks();
+  function handleComplete(id) {
+    return runMutation(`/tasks/${id}/complete`, { method: "PATCH" });
   }
 
-  async function handleDelete(id) {
-    await fetch(`${API_URL}/tasks/${id}`, { method: "DELETE" });
-    loadTasks();
+  function handleDelete(id) {
+    return runMutation(`/tasks/${id}`, { method: "DELETE" });
   }
 
   function handleEdit(task) {
@@ -63,207 +115,178 @@ export default function App() {
     setEditDescription(task.description ?? "");
   }
 
-  async function handleSaveEdit() {
-    await fetch(`${API_URL}/tasks/${editingTask}`, {
+  async function handleSaveEdit(event) {
+    event.preventDefault();
+    if (!editTitle.trim()) return;
+
+    const saved = await runMutation(`/tasks/${editingTask}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: editTitle, description: editDescription }),
+      body: JSON.stringify({
+        title: editTitle.trim(),
+        description: editDescription,
+      }),
     });
-    setEditingTask(null);
-    loadTasks();
+
+    if (saved) setEditingTask(null);
   }
 
-  const total = tasks.length;
-  const concluidas = tasks.filter(t => t.completed_at).length;
+  const completed = tasks.filter(task => task.completed_at).length;
+  const pending = tasks.length - completed;
+  const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
+
+  const visibleTasks = useMemo(() => {
+    if (statusFilter === "completed") return tasks.filter(task => task.completed_at);
+    if (statusFilter === "pending") return tasks.filter(task => !task.completed_at);
+    return tasks;
+  }, [statusFilter, tasks]);
+
+  const formattedDate = new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  }).format(new Date());
+  const today = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
 
   return (
-    <div style={{ minHeight: "100vh" }}>
-      <Header />
+    <div className="app-shell" id="top">
+      <div className="ambient ambient-one" />
+      <div className="ambient ambient-two" />
 
-      <main style={{ maxWidth: "760px", margin: "0 auto", padding: "2rem 1rem" }}>
+      <Header apiStatus={error ? "offline" : isLoading ? "syncing" : "online"} />
 
-        {/* Stats */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "0.75rem",
-          marginBottom: "1.5rem",
-        }}>
-          <div className="glass" style={{
-            borderRadius: "12px",
-            padding: "1rem 1.25rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-          }}>
-            <div style={{
-              width: "36px", height: "36px",
-              backgroundColor: "rgba(124,58,237,0.15)",
-              borderRadius: "10px",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <LayoutList size={18} color="var(--purple-light)" />
-            </div>
-            <div>
-              <p style={{ fontSize: "1.4rem", fontWeight: "700", color: "#fff" }}>{total}</p>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Total de tarefas</p>
-            </div>
+      <main className="dashboard">
+        <section className="hero">
+          <div>
+            <span className="eyebrow"><Sparkles size={14} /> Seu espaço de foco</span>
+            <h1>Organize hoje.<br /><span>Avance todos os dias.</span></h1>
+            <p>Capture o que importa, acompanhe seu ritmo e transforme planos em progresso real.</p>
           </div>
-
-          <div className="glass" style={{
-            borderRadius: "12px",
-            padding: "1rem 1.25rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-          }}>
-            <div style={{
-              width: "36px", height: "36px",
-              backgroundColor: "rgba(34,197,94,0.12)",
-              borderRadius: "10px",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <CheckCheck size={18} color="var(--success)" />
-            </div>
-            <div>
-              <p style={{ fontSize: "1.4rem", fontWeight: "700", color: "#fff" }}>{concluidas}</p>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Concluídas</p>
-            </div>
+          <div className="today-card">
+            <span>Hoje</span>
+            <strong>{today}</strong>
+            <div className="progress-line"><i style={{ width: `${progress}%` }} /></div>
+            <small>{progress}% das tarefas concluídas</small>
           </div>
-        </div>
+        </section>
 
-        <TaskForm onCreateTask={handleCreateTask} />
+        <section className="stats-grid" aria-label="Resumo das tarefas">
+          <article className="stat-card stat-total">
+            <div className="stat-icon"><LayoutGrid size={20} /></div>
+            <div><span>Total</span><strong>{tasks.length}</strong></div>
+            <small>Tarefas encontradas</small>
+          </article>
+          <article className="stat-card stat-pending">
+            <div className="stat-icon"><CircleDashed size={20} /></div>
+            <div><span>Em aberto</span><strong>{pending}</strong></div>
+            <small>Próximos passos</small>
+          </article>
+          <article className="stat-card stat-completed">
+            <div className="stat-icon"><CheckCheck size={20} /></div>
+            <div><span>Concluídas</span><strong>{completed}</strong></div>
+            <small>Progresso realizado</small>
+          </article>
+        </section>
 
-        {/* Search */}
-        <div
-          className="glass search-bar"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            margin: "1rem 0",
-            borderRadius: "10px",
-            padding: "0.75rem 1rem",
-            transition: "all 0.2s ease",
-          }}>
-          <Search size={17} color="var(--text-muted)" />
-          <input
-            type="text"
-            placeholder="Buscar por título..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              background: "none",
-              color: "#e1e1e1",
-              fontSize: "0.9rem",
-              width: "100%",
-            }}
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              style={{
-                background: "none",
-                color: "var(--text-muted)",
-                fontSize: "1rem",
-                padding: "0 4px",
-              }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {/* Edit modal */}
-        {editingTask && (
-          <div className="glass" style={{
-            border: "1px solid rgba(124,58,237,0.4)",
-            borderRadius: "14px",
-            padding: "1.25rem",
-            marginBottom: "1rem",
-            boxShadow: "0 0 32px rgba(124,58,237,0.1)",
-            animation: "fadeInUp 0.2s ease",
-          }}>
-            <h3 style={{
-              color: "var(--purple-light)",
-              marginBottom: "1rem",
-              fontSize: "0.85rem",
-              fontWeight: "600",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}>
-              ✏️ Editando tarefa
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              <input
-                value={editTitle}
-                onChange={e => setEditTitle(e.target.value)}
-                style={{
-                  backgroundColor: "var(--bg-input)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "10px",
-                  padding: "0.8rem 1rem",
-                  color: "#e1e1e1",
-                  fontSize: "0.9rem",
-                  width: "100%",
-                }}
-              />
-              <textarea
-                value={editDescription}
-                onChange={e => setEditDescription(e.target.value)}
-                rows={3}
-                style={{
-                  backgroundColor: "var(--bg-input)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "10px",
-                  padding: "0.8rem 1rem",
-                  color: "#e1e1e1",
-                  fontSize: "0.9rem",
-                  resize: "vertical",
-                  width: "100%",
-                }}
-              />
-              <div style={{ display: "flex", gap: "0.75rem" }}>
-                <button
-                  onClick={handleSaveEdit}
-                  className="btn-primary"
-                  style={{
-                    background: "linear-gradient(135deg, #7c3aed, #6d28d9)",
-                    color: "white",
-                    padding: "0.75rem 1.5rem",
-                    borderRadius: "10px",
-                    fontWeight: "600",
-                    fontSize: "0.9rem",
-                    boxShadow: "0 4px 16px rgba(124,58,237,0.3)",
-                  }}
-                >
-                  Salvar
-                </button>
-                <button
-                  onClick={() => setEditingTask(null)}
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    color: "var(--text-muted)",
-                    padding: "0.75rem 1.5rem",
-                    borderRadius: "10px",
-                    fontSize: "0.9rem",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
+        {error && (
+          <div className="error-banner" role="alert">
+            <span>{error}</span>
+            <button onClick={reloadTasks}>Tentar novamente</button>
           </div>
         )}
 
-        <TaskList
-          tasks={tasks}
-          onComplete={handleComplete}
-          onDelete={handleDelete}
-          onEdit={handleEdit}
-        />
+        <section className="workspace">
+          <aside className="composer-column">
+            <TaskForm onCreateTask={handleCreateTask} />
+            <div className="focus-note">
+              <span>Uma ideia de cada vez</span>
+              <p>Tarefas claras são mais fáceis de começar e muito melhores de concluir.</p>
+            </div>
+          </aside>
+
+          <div className="tasks-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="section-kicker">Minha lista</span>
+                <h2>Tarefas</h2>
+              </div>
+              <span className="result-count">{visibleTasks.length} {visibleTasks.length === 1 ? "item" : "itens"}</span>
+            </div>
+
+            <div className="toolbar">
+              <label className="search-field">
+                <Search size={18} />
+                <input
+                  type="search"
+                  aria-label="Buscar tarefas por título"
+                  placeholder="Buscar uma tarefa..."
+                  value={search}
+                  onChange={event => handleSearch(event.target.value)}
+                />
+                {search && (
+                  <button type="button" onClick={() => handleSearch("")} aria-label="Limpar busca">
+                    <X size={16} />
+                  </button>
+                )}
+              </label>
+
+              <div className="filters" aria-label="Filtrar por status">
+                {[
+                  ["all", "Todas"],
+                  ["pending", "Pendentes"],
+                  ["completed", "Concluídas"],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={statusFilter === value ? "active" : ""}
+                    onClick={() => setStatusFilter(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <TaskList
+              tasks={visibleTasks}
+              isLoading={isLoading}
+              hasFilters={Boolean(search) || statusFilter !== "all"}
+              onComplete={handleComplete}
+              onDelete={handleDelete}
+              onEdit={handleEdit}
+            />
+          </div>
+        </section>
       </main>
+
+      {editingTask && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setEditingTask(null)}>
+          <form className="edit-modal" onSubmit={handleSaveEdit} onMouseDown={event => event.stopPropagation()}>
+            <div className="modal-heading">
+              <div>
+                <span className="section-kicker">Atualizar tarefa</span>
+                <h2>Editar detalhes</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setEditingTask(null)} aria-label="Fechar edição">
+                <X size={19} />
+              </button>
+            </div>
+            <label>
+              Título
+              <input value={editTitle} onChange={event => setEditTitle(event.target.value)} autoFocus />
+            </label>
+            <label>
+              Descrição
+              <textarea value={editDescription} onChange={event => setEditDescription(event.target.value)} rows={4} />
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="button-ghost" onClick={() => setEditingTask(null)}>Cancelar</button>
+              <button type="submit" className="button-primary" disabled={!editTitle.trim()}>Salvar alterações</button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
