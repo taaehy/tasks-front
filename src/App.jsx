@@ -6,6 +6,12 @@ import { Search, LayoutList, CheckCheck } from "lucide-react";
 
 const API_URL = "https://tasks-api-ggyw.onrender.com";
 
+async function fetchTasks(search) {
+  const query = search ? `?title=${encodeURIComponent(search)}` : "";
+  const response = await fetch(`${API_URL}/tasks${query}`);
+  return response.json();
+}
+
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [search, setSearch] = useState("");
@@ -14,14 +20,22 @@ export default function App() {
   const [editDescription, setEditDescription] = useState("");
 
   async function loadTasks() {
-    const query = search ? `?title=${search}` : "";
-    const response = await fetch(`${API_URL}/tasks${query}`);
-    const data = await response.json();
+    const data = await fetchTasks(search);
     setTasks(data);
   }
 
   useEffect(() => {
-    loadTasks();
+    let shouldUpdate = true;
+
+    fetchTasks(search).then(data => {
+      if (shouldUpdate) {
+        setTasks(data);
+      }
+    });
+
+    return () => {
+      shouldUpdate = false;
+    };
   }, [search]);
 
   async function handleCreateTask({ title, description }) {
